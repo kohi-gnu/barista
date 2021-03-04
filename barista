@@ -5,6 +5,27 @@ use warnings;
 
 use Data::Dumper;
 
+my $REPOS_CONF = "etc/barista/repos.conf";
+
+sub get_repos {
+    my @repos;
+    open( my $fd, "<", $REPOS_CONF ) or die "Can't open $REPOS_CONF";
+
+    while ( my $line = <$fd> ) {
+        chomp($line);
+        if ( $line !~ /^#/ ) {
+            my @tmp = split( / |\t/, $line );
+            my $url = shift @tmp;
+            while ( my $dir = shift @tmp ) {
+                push( @repos, "$url$dir" );
+            }
+        }
+    }
+    close($fd);
+    print Dumper(@repos);
+    return @repos
+}
+
 sub do_install {
     print Dumper(@ARGV);
 }
@@ -20,7 +41,7 @@ sub do_update {
 sub show_usage {
     my ($cmd) = @_;
     print "Usage: $0 command\n";
-    print "       $0 install|remove pkg1 [pkg2 ...]";
+    print "       $0 install|remove pkg1 [pkg2 ...]\n";
     print "       $0 update [pkg1 ...]";
 
     $cmd eq "help" ? exit 0 : exit 1;
