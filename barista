@@ -1,0 +1,42 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+
+use Data::Dumper;
+
+sub do_install {
+    print Dumper(@ARGV);
+}
+
+sub do_remove {
+    print Dumper(@ARGV);
+}
+
+sub do_update {
+    print Dumper(@ARGV);
+}
+
+sub show_usage {
+    my ($cmd) = @_;
+    print "Usage: $0 command\n";
+    print "       $0 install|remove pkg1 [pkg2 ...]";
+    print "       $0 update [pkg1 ...]";
+
+    $cmd eq "help" ? exit 0 : exit 1;
+}
+
+my $cmd = shift or die "Usage: $0 install|remove|update";
+
+if ( $cmd eq "install" ) {
+    do_install();
+}
+elsif ( $cmd eq "remove" ) {
+    do_remove();
+}
+elsif ( $cmd eq "update" ) {
+    do_update();
+}
+else {
+    show_usage($cmd);
+}
