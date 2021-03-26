@@ -4,6 +4,7 @@ use strict;
 use warnings;
 
 use Data::Dumper;
+use LWP::Simple;
 
 my $REPOS_CONF = "etc/barista/repos.conf";
 
@@ -22,12 +23,33 @@ sub get_repos {
         }
     }
     close($fd);
-    print Dumper(@repos);
-    return @repos
+    return @repos;
+}
+
+sub search_package {
+    my ($pkgname) = @_;
+    for my $repo ( get_repos() ) {
+        if ( is_success( getstore( "$repo/PACKAGES", "/tmp/PACKAGES" ) ) ) {
+            open( my $fd, "<", "/tmp/PACKAGES" );
+            while (<$fd>) {
+                if ( $_ =~ /$pkgname/ ) {
+                    close($fd);
+                    print "$pkgname found in $repo\n";
+                    return $repo;
+                }
+            }
+            close($fd);
+        }
+        else {
+            print "error: $repo\n";
+        }
+    }
 }
 
 sub do_install {
-    print Dumper(@ARGV);
+    for (@ARGV) {
+        search_package($_);
+    }
 }
 
 sub do_remove {
