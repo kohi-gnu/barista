@@ -5,8 +5,12 @@ use warnings;
 
 use Data::Dumper;
 use LWP::Simple;
+use File::Path qw(make_path);
+use Archive::Tar;
 
 my $REPOS_CONF = "etc/barista/repos.conf";
+my $ADM_DIR    = "/var/lib/barista";
+my $SYSROOT    = $ENV{'SYSROOT'} || "/";
 
 sub get_repos {
     my @repos;
@@ -32,10 +36,12 @@ sub search_package {
         if ( is_success( getstore( "$repo/PACKAGES", "/tmp/PACKAGES" ) ) ) {
             open( my $fd, "<", "/tmp/PACKAGES" );
             while (<$fd>) {
-                if ( $_ =~ /$pkgname/ ) {
+                if ( $_ =~ /^$pkgname:/ ) {
                     close($fd);
-                    print "$pkgname found in $repo\n";
-                    return $repo;
+                    chomp($_);
+                    my ($pkgname, $pkgversion, $pkgfile) = split(/:/, $_);
+                    print "$pkgname (v$pkgversion) found in $repo/$pkgfile\n";
+                    return $pkgversion, "$repo/$pkgfile";
                 }
             }
             close($fd);
@@ -46,9 +52,76 @@ sub search_package {
     }
 }
 
+sub is_package_installed {
+    my ($pkgname) = @_;
+    if (-f "$ADM_DIR/installed") {
+        open(my $fd, "<", "$ADM_DIR/installed");
+        while (<$fd>) {
+            if ($_ =~ /^$pkgname:/) {
+                chomp($_);
+                close($fd);
+                my (undef, $pkgversion) = split(/:/, $_);
+                return $pkgversion;
+            }
+        }
+        close($fd);
+    }
+    return 0;
+}
+
+sub get_compression_algorithm {
+    my ($file) = @_;
+
+    if ($file =~ /gz$/) {
+        return COMPRESS_GZIP;
+    }
+    if ($file =~ /bz$/) {
+        return COMPRESS_BZIP;
+    }
+    return undef;
+}
+
 sub do_install {
     for (@ARGV) {
-        search_package($_);
+        my $pkgname = $_;
+        my $installed_version = is_package_installed($pkgname);
+        if ($installed_version) {
+            print "$pkgname (v$installed_version) is already installed\n";
+            next;
+        }
+
+        my ($pkgversion, $pkgurl) = search_package($pkgname);
+        if (!$pkgversion) {
+            print "$pkgname not found in repositories\n";
+            next;
+        }
+
+        my $filename = $pkgurl;
+        $filename =~ s/^.*\///;
+
+        if (is_error(getstore($pkgurl, "/tmp/$filename"))) {
+            print "error while downloading $pkgname from $pkgurl";
+            next;
+        }
+
+        my $archive = Archive::Tar->new("/tmp/$filename", get_compression_algorithm($filename));
+
+
+        open(my $fd, ">", "$ADM_DIR/packages/$pkgname.list");
+        for ($archive->get_files()) {
+            my $file_path = $_->full_path;
+            if ($file_path !~ /^.\/(install.sh|remove.sh|META)$/) {
+                print $fd "$file_path\n";
+                $_->extract("$SYSROOT/$file_path");
+            }
+        }
+        close($fd);
+
+        open($fd, ">>", "$ADM_DIR/installed");
+        print $fd "$pkgname:$pkgversion\n";
+        close($fd);
+
+        unlink("/tmp/$filename");
     }
 }
 
@@ -68,6 +141,15 @@ sub show_usage {
 
     $cmd eq "help" ? exit 0 : exit 1;
 }
+
+# create package database
+if ( !-d "$ADM_DIR/packages" ) {
+    unless ( make_path("$ADM_DIR/packages") ) {
+        die "Can't create packages database";
+    }
+}
+
+print "sysroot: $SYSROOT\n";
 
 my $cmd = shift or die "Usage: $0 install|remove|update";
 
