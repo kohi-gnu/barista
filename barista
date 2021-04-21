@@ -8,9 +8,9 @@ use LWP::Simple;
 use File::Path qw(make_path);
 use Archive::Tar;
 
-my $REPOS_CONF = "etc/barista/repos.conf";
-my $ADM_DIR    = "/var/lib/barista";
-my $SYSROOT    = $ENV{'SYSROOT'} || "/";
+my $SYSROOT    = $ENV{'SYSROOT'} || "";
+my $REPOS_CONF = "$SYSROOT/etc/barista/repos.conf";
+my $ADM_DIR    = "$SYSROOT/var/lib/barista";
 
 sub get_repos {
     my @repos;
@@ -126,7 +126,36 @@ sub do_install {
 }
 
 sub do_remove {
-    print Dumper(@ARGV);
+    for (@ARGV) {
+        my $pkgname = $_;
+        my $installed_version = is_package_installed($pkgname);
+        if (!$installed_version) {
+            print "$pkgname isn't installed on your system\n";
+            next;
+        }
+
+        open(my $fd, "<", "$ADM_DIR/packages/$pkgname.list");
+        while (<$fd>) {
+            chomp($_);
+            my $path = "$SYSROOT/$_";
+            if (-d $path) {
+                rmdir($path);
+            } else {
+                unlink($path);
+            }
+        }
+        close($fd);
+        unlink("$ADM_DIR/packages/$pkgname.list");
+
+        open($fd, "<", "$ADM_DIR/installed");
+        my @installed_packages = <$fd>;
+        close($fd);
+        open($fd, ">", "$ADM_DIR/installed");
+        foreach my $installed ( @installed_packages ) {
+            print $fd $installed unless ( $installed =~ /^$pkgname:/);
+        }
+        close($fd);
+    }
 }
 
 sub do_update {
