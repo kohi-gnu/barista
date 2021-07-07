@@ -162,11 +162,23 @@ sub do_update {
     print Dumper(@ARGV);
 }
 
+sub do_list_installed {
+    my ($pkgname) = @_;
+    if (-f "$ADM_DIR/installed") {
+        open(my $fd, "<", "$ADM_DIR/installed");
+        while (<$fd>) {
+            print $_;
+        }
+        close($fd);
+    }
+}
+
 sub show_usage {
     my ($cmd) = @_;
     print "Usage: $0 command\n";
     print "       $0 install|remove pkg1 [pkg2 ...]\n";
-    print "       $0 update [pkg1 ...]";
+    print "       $0 update [pkg1 ...]\n";
+    print "       $0 list\n";
 
     $cmd eq "help" ? exit 0 : exit 1;
 }
@@ -180,7 +192,7 @@ if ( !-d "$ADM_DIR/packages" ) {
 
 print "sysroot: $SYSROOT\n";
 
-my $cmd = shift or die "Usage: $0 install|remove|update";
+my $cmd = shift or die "Usage: $0 install|remove|update|list";
 
 if ( $cmd eq "install" ) {
     do_install();
@@ -190,6 +202,9 @@ elsif ( $cmd eq "remove" ) {
 }
 elsif ( $cmd eq "update" ) {
     do_update();
+}
+elsif ( $cmd eq "list" ) {
+    do_list_installed();
 }
 else {
     show_usage($cmd);
