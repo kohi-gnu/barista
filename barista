@@ -81,15 +81,44 @@ sub get_compression_algorithm {
     return undef;
 }
 
-sub do_install {
-    for (@ARGV) {
+sub remove_pkg {
+    my @tmp = @_;
+    for (@tmp) {
         my $pkgname = $_;
         my $installed_version = is_package_installed($pkgname);
-        if ($installed_version) {
-            print "$pkgname (v$installed_version) is already installed\n";
+        if (!$installed_version) {
+            print "$pkgname isn't installed on your system\n";
             next;
         }
 
+        open(my $fd, "<", "$ADM_DIR/packages/$pkgname.list");
+        while (<$fd>) {
+            chomp($_);
+            my $path = "$SYSROOT/$_";
+            if (-d $path) {
+                rmdir($path);
+            } else {
+                unlink($path);
+            }
+        }
+        close($fd);
+        unlink("$ADM_DIR/packages/$pkgname.list");
+
+        open($fd, "<", "$ADM_DIR/installed");
+        my @installed_packages = <$fd>;
+        close($fd);
+        open($fd, ">", "$ADM_DIR/installed");
+        foreach my $installed ( @installed_packages ) {
+            print $fd $installed unless ( $installed =~ /^$pkgname:/);
+        }
+        close($fd);
+    }
+}
+
+sub install_pkg {
+    my @tmp = @_;
+    for (@tmp) {
+        my $pkgname = $_;
         my ($pkgversion, $pkgurl) = search_package($pkgname);
         if (!$pkgversion) {
             print "$pkgname not found in repositories\n";
@@ -125,41 +154,40 @@ sub do_install {
     }
 }
 
+sub do_install {
+    install_pkg(@ARGV);
+}
+
 sub do_remove {
-    for (@ARGV) {
-        my $pkgname = $_;
-        my $installed_version = is_package_installed($pkgname);
-        if (!$installed_version) {
-            print "$pkgname isn't installed on your system\n";
-            next;
-        }
-
-        open(my $fd, "<", "$ADM_DIR/packages/$pkgname.list");
-        while (<$fd>) {
-            chomp($_);
-            my $path = "$SYSROOT/$_";
-            if (-d $path) {
-                rmdir($path);
-            } else {
-                unlink($path);
-            }
-        }
-        close($fd);
-        unlink("$ADM_DIR/packages/$pkgname.list");
-
-        open($fd, "<", "$ADM_DIR/installed");
-        my @installed_packages = <$fd>;
-        close($fd);
-        open($fd, ">", "$ADM_DIR/installed");
-        foreach my $installed ( @installed_packages ) {
-            print $fd $installed unless ( $installed =~ /^$pkgname:/);
-        }
-        close($fd);
-    }
+    remove_pkg(@ARGV);
 }
 
 sub do_update {
     print Dumper(@ARGV);
+    my @pkginstalled;
+    my @updatepkg;
+    open (my $fd, "<", "$ADM_DIR/installed");
+    while (<$fd>) {
+        chomp($_);
+        my ($pkgname, $pkgversion) = split(/:/, $_);
+        my ($newversion, undef) = search_package($pkgname);
+        chomp($pkgversion);
+        chomp($newversion);
+        if ($pkgversion && $newversion > $pkgversion) {
+            push(@updatepkg, $pkgname);
+        }
+    }
+    close($fd);
+
+    if (@updatepkg) {
+        print "update ? [o/N]";
+        my $userchoice = <STDIN>;
+        chomp($userchoice);
+        if (lc $userchoice =~ "o") {
+            remove_pkg(@updatepkg);
+            install_pkg(@updatepkg);
+        }
+    }
 }
 
 sub do_list_installed {
